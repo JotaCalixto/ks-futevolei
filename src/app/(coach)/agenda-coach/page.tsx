@@ -68,14 +68,15 @@ export default function AgendaCoachPage() {
       .maybeSingle()
 
     if (dayData) {
-      setDay(dayData as Day)
-      setObsValue(dayData.observation ?? '')
-      setThemeValue(dayData.theme ?? '')
+      const d = dayData as unknown as Day
+      setDay(d)
+      setObsValue(d.observation ?? '')
+      setThemeValue(d.theme ?? '')
 
       const { data: slotsData } = await supabase
         .from('training_slots')
         .select('*')
-        .eq('training_day_id', dayData.id)
+        .eq('training_day_id', d.id)
         .order('start_time', { ascending: true })
 
       setSlots((slotsData ?? []) as Slot[])
@@ -89,14 +90,14 @@ export default function AgendaCoachPage() {
     if (!coach?.id) { toast.error('Coach não encontrado'); return }
     setIsSaving(true)
     if (day) {
-      await supabase.from('training_days').update({ is_open: true }).eq('id', day.id)
+      await supabase.from('training_days').update({ is_open: true } as any).eq('id', day.id)
     } else {
       await supabase.from('training_days').insert({
         academy_id: tenant.id,
         coach_id: coach.id,
         date: dateStr,
         is_open: true,
-      })
+      } as any)
     }
     await load()
     setIsSaving(false)

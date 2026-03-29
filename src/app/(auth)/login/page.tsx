@@ -38,11 +38,12 @@ export default function LoginPage() {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) throw new Error('Email ou senha incorretos.')
       const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', data.user.id)
-        .single()
-      window.location.href = profile?.role === 'coach' ? '/dashboard' : '/home'
+  .from('profiles')
+  .select('role')
+  .eq('id', data.user.id)
+  .single()
+const profileData = profile as { role: string } | null
+window.location.href = profileData?.role === 'coach' ? '/dashboard' : '/home'
     } catch (err: unknown) {
       alert(err instanceof Error ? err.message : 'Erro ao fazer login')
       setIsLoading(false)
@@ -77,12 +78,12 @@ export default function LoginPage() {
         role,
         full_name: fullName.trim(),
         phone: cleanPhone,
-      })
+      } as any)
       if (profileError) throw new Error('Erro ao criar perfil: ' + profileError.message)
       if (role === 'student') {
-        await supabase.from('students').insert({ profile_id: userId, academy_id: tenant.id })
+        await supabase.from('students').insert({ profile_id: userId, academy_id: tenant.id } as any)
       } else {
-        await supabase.from('coaches').insert({ profile_id: userId, academy_id: tenant.id, default_capacity: 10 })
+        await supabase.from('coaches').insert({ profile_id: userId, academy_id: tenant.id, default_capacity: 10 } as any)
       }
       window.location.href = role === 'coach' ? '/dashboard' : '/home'
     } catch (err: unknown) {

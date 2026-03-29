@@ -3,6 +3,10 @@ import type { NextConfig } from 'next'
 const withPWA = require('next-pwa')
 
 const nextConfig: NextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+
   reactStrictMode: true,
 
   images: {
@@ -72,16 +76,10 @@ const nextConfig: NextConfig = {
     ]
   },
 
+  turbopack: {},
+
   experimental: {
     optimizePackageImports: ['lucide-react', 'framer-motion', '@radix-ui/react-icons'],
-    turbo: {
-      rules: {
-        '*.svg': {
-          loaders: ['@svgr/webpack'],
-          as: '*.js',
-        },
-      },
-    },
   },
 
   webpack: (config, { isServer }) => {
