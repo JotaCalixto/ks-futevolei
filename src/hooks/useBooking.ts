@@ -1,8 +1,9 @@
 'use client'
-// ============================================================
-import { useCallback, useEffect, useRef } from 'react'
-import type { CreateBookingResponse, SlotWithContext } from '@/types/domain'
-import { notify } from '@/components/shared/PremiumToast'
+import { useCallback } from 'react'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useAuth } from '@/components/providers/Providers'
+import { useTenant } from '@/components/providers/TenantProvider'
+import type { CreateBookingResponse } from '@/types/domain'
 
 export function useBooking() {
   const { student } = useAuth()
@@ -39,7 +40,7 @@ export function useBooking() {
     if (slot.status !== 'open') return { success: false, message: 'Este horário está fechado.' }
 
     // 3. Slot lotado → lista de espera
-    if (slot.booked_count >= slot.capacity) {
+    if ((slot.booked_count ?? 0) >= slot.capacity) {
       const { data: waitlistPos } = await supabase
         .from('waitlist')
         .select('position')
@@ -54,12 +55,7 @@ export function useBooking() {
 
       const { error: wErr } = await supabase
         .from('waitlist')
-        .insert({
-          slot_id: slotId,
-          student_id: student.id,
-          academy_id: tenant.id,
-          position: nextPos,
-        })
+        .insert({ slot_id: slotId, student_id: student.id, academy_id: tenant.id, position: nextPos } as any)
 
       if (wErr) return { success: false, message: 'Erro ao entrar na lista de espera.' }
 
@@ -80,11 +76,17 @@ export function useBooking() {
         academy_id: tenant.id,
         status: 'confirmed',
         notes: notes ?? null,
-      })
+      } as any)
       .select()
       .single()
 
     if (bErr) return { success: false, message: 'Erro ao realizar reserva. Tente novamente.' }
+
+    // 5. Atualiza booked_count
+    await supabase
+      .from('training_slots')
+      .update({ booked_count: (slot.booked_count ?? 0) + 1 } as any)
+      .eq('id', slotId)
 
     return {
       success: true,
@@ -95,16 +97,14 @@ export function useBooking() {
   }, [student?.id, tenant.id, supabase])
 
   const cancelBooking = useCallback(async (bookingId: string, reason?: string): Promise<{ success: boolean; message: string }> => {
-    // Verifica prazo de cancelamento
     const { data: booking } = await supabase
       .from('bookings')
-      .select(`*, slot:training_slots(start_time, training_day:training_days(date))`)
+      .select(`*, slot:training_slots(start_time, booked_count, training_day:training_days(date))`)
       .eq('id', bookingId)
       .single()
 
     if (!booking) return { success: false, message: 'Reserva não encontrada.' }
 
-    // Verifica prazo
     const slotDate = (booking.slot as Record<string, unknown>)?.training_day as Record<string, unknown>
     const slotDateStr = slotDate?.date as string
     const slotTime = (booking.slot as Record<string, unknown>)?.start_time as string
@@ -121,10 +121,20 @@ export function useBooking() {
 
     const { error } = await supabase
       .from('bookings')
-      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: reason ?? null })
+      .update({ status: 'cancelled', cancelled_at: new Date().toISOString(), cancel_reason: reason ?? null } as any)
       .eq('id', bookingId)
 
     if (error) return { success: false, message: 'Erro ao cancelar reserva.' }
+
+    // Decrementa booked_count
+    const currentCount = (booking.slot as any)?.booked_count ?? 0
+    if (currentCount > 0) {
+      await supabase
+        .from('training_slots')
+        .update({ booked_count: currentCount - 1 } as any)
+        .eq('id', (booking as any).slot_id)
+    }
+
     return { success: true, message: 'Reserva cancelada.' }
   }, [supabase, tenant.settings.cancelDeadlineHours])
 
