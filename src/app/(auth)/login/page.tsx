@@ -237,7 +237,7 @@ window.location.href = profileData?.role === 'coach' ? '/dashboard' : '/home'
                 <div className="font-bold text-white mb-1">Sou Aluno</div>
                 <div className="text-sm text-gray-500">Quero reservar quadras e participar de treinos</div>
               </button>
-              <button onClick={() => setStep('form')} disabled={isLoading}
+              <button onClick={() => createUser('coach')} disabled={isLoading}
                 className="w-full rounded-2xl border border-white/10 p-5 text-left hover:border-yellow-500/50 transition-colors disabled:opacity-40">
                 <div className="font-bold text-white mb-1">Sou Professor</div>
                 <div className="text-sm text-gray-500">Quero gerenciar turmas e alunos</div>

@@ -106,8 +106,10 @@ export function formatDate(date: string | Date, pattern: string = 'dd/MM/yyyy'):
 }
 
 // Formata data relativa
-export function formatRelativeDate(date: string | Date): string {
+export function formatRelativeDate(date: string | Date | null | undefined): string {
+  if (!date) return ''
   const d = typeof date === 'string' ? parseISO(date) : date
+  if (isNaN(d.getTime())) return ''
 
   if (isToday(d)) return 'Hoje'
   if (isTomorrow(d)) return 'Amanhã'

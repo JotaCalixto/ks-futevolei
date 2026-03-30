@@ -3,10 +3,11 @@ import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/components/providers/Providers'
 import { useCoachRealtime } from '@/hooks/useCoachRealtime'
+import { CoachShell } from '@/components/layout/CoachShell'
 
 function CoachLayoutInner({ children }: { children: React.ReactNode }) {
   useCoachRealtime()
-  return <>{children}</>
+  return <CoachShell>{children}</CoachShell>
 }
 
 export default function CoachLayout({ children }: { children: React.ReactNode }) {
@@ -36,6 +37,5 @@ export default function CoachLayout({ children }: { children: React.ReactNode })
   )
 
   if (!profile) return null
-
   return <CoachLayoutInner>{children}</CoachLayoutInner>
 }
