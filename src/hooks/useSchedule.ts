@@ -1,6 +1,10 @@
 'use client'
-// ============================================================
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { format } from 'date-fns'
+import { getSupabaseBrowserClient } from '@/lib/supabase/client'
+import { useAuth } from '@/components/providers/Providers'
+import { useTenant } from '@/components/providers/TenantProvider'
+import type { SlotWithContext } from '@/types/domain'
 
 export function useSchedule(selectedDate: Date) {
   const { student } = useAuth()
@@ -10,7 +14,6 @@ export function useSchedule(selectedDate: Date) {
   const [slots, setSlots] = useState<SlotWithContext[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
-
   const dateStr = format(selectedDate, 'yyyy-MM-dd')
 
   const loadDay = useCallback(async () => {
@@ -18,42 +21,40 @@ export function useSchedule(selectedDate: Date) {
     try {
       const { data: day } = await supabase
         .from('training_days')
-        .select(`
-          *,
-          training_slots(
-            *,
-            bookings(id, status, student_id)
-          )
-        `)
+        .select('*, training_slots(*, bookings(id, status, student_id))')
         .eq('academy_id', tenant.id)
         .eq('date', dateStr)
-        .single()
+        .maybeSingle()
 
       if (!day) { setTrainingDay(null); setSlots([]); return }
 
-      setTrainingDay(day as unknown as import('@/types/domain').TrainingDay)
+      setTrainingDay({ ...day, isOpen: (day as any).is_open } as unknown as import('@/types/domain').TrainingDay)
 
       const now = new Date()
       const today = format(now, 'yyyy-MM-dd')
 
-      const enriched: SlotWithContext[] = ((day.training_slots ?? []) as unknown as import('@/types/domain').TrainingSlot[]).map(slot => {
+      const enriched: SlotWithContext[] = ((day.training_slots ?? []) as any[]).map((slot: any) => {
         const userBooking = (slot.bookings ?? []).find(
           (b: { student_id: string; status: string }) => b.student_id === student?.id && b.status === 'confirmed'
         ) ?? null
-
-        const slotDateTime = new Date(`${dateStr}T${slot.startTime}`)
+        const bookedCount = slot.booked_count ?? 0
+        const startTime = slot.start_time ?? ''
+        const endTime = slot.end_time ?? ''
+        const slotDateTime = new Date(dateStr + 'T' + startTime + '-03:00')
         const isPast = slotDateTime < now
-
         return {
           ...slot,
-          availableSpots: Math.max(0, slot.capacity - slot.bookedCount),
-          isFull: slot.bookedCount >= slot.capacity,
-          dayObservation: (day as Record<string, unknown>).observation as string | null,
-          dayTheme: (day as Record<string, unknown>).theme as string | null,
+          startTime,
+          endTime,
+          bookedCount,
+          availableSpots: Math.max(0, slot.capacity - bookedCount),
+          isFull: bookedCount >= slot.capacity,
+          dayObservation: (day as any).observation ?? null,
+          dayTheme: (day as any).theme ?? null,
           dayDate: dateStr,
           isToday: dateStr === today,
           isPast,
-          userBooking: userBooking as unknown as import('@/types/domain').Booking | null,
+          userBooking: userBooking ?? null,
           userWaitlistPosition: null,
         }
       })
@@ -64,38 +65,21 @@ export function useSchedule(selectedDate: Date) {
     }
   }, [supabase, tenant.id, dateStr, student?.id])
 
-  // Subscreve realtime nos slots do dia
   useEffect(() => {
     loadDay()
-
-    // Canal com namespace por tenant
     const ch = supabase
-      .channel(`${tenant.id}:slots:${dateStr}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'training_slots',
-          filter: `academy_id=eq.${tenant.id}`,
-        },
+      .channel(tenant.id + ':slots:' + dateStr)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'training_slots', filter: 'academy_id=eq.' + tenant.id },
         (payload) => {
-          const updated = payload.new as import('@/types/domain').TrainingSlot
+          const updated = payload.new as any
           setSlots(prev => prev.map(s =>
             s.id === updated.id
-              ? {
-                  ...s,
-                  bookedCount: updated.bookedCount,
-                  availableSpots: Math.max(0, updated.capacity - updated.bookedCount),
-                  isFull: updated.bookedCount >= updated.capacity,
-                  status: updated.status,
-                }
+              ? { ...s, bookedCount: updated.booked_count ?? 0, availableSpots: Math.max(0, updated.capacity - (updated.booked_count ?? 0)), isFull: (updated.booked_count ?? 0) >= updated.capacity, status: updated.status }
               : s
           ))
         }
       )
       .subscribe()
-
     channelRef.current = ch
     return () => { supabase.removeChannel(ch) }
   }, [dateStr, tenant.id, supabase, loadDay])
